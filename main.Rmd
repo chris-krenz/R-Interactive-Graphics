@@ -8,6 +8,12 @@ output: html_document
 ```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+# library(shiny)
+library(plotly)      # allow interactivity w/o need for shiny server hosting
+library(crosstalk) 
+# library(stringi)   # Can use instead of nested gsub for mult col renames
+# library(lubridate) # Can use to more easily extract year from a date
+
 ```
 
 
@@ -56,35 +62,27 @@ c19vacsMA_raw <- read_csv("data/COVID-19_Vaccinations_MA_County.csv",
 problems(c19vacsMA_raw) # No problems (3/8/2023)
 
 c19vacsMA_raw
+
 ```
 
 
 ### R: Tidying...
 ```{r tidying}
-# Selecting cols
+# Remove CDC analyses and other fields due to insufficient or inconsistent data
+# (e.g. no pop level data for bivalent, missing age groups for 2nd booster, etc)
 c19vacsMA_sel <- c19vacsMA_raw %>% 
-  select(Date, MMWR_week, Recip_County, Metro_status, SVI_CTGY,
-         # matches("^(Census2019_).*(5Plus|12Plus|18Plus|65Plus)"),
-         matches(paste0("^(Census2019_|",
-                          "Administered_Dose1_|", # all doses but second boost
-                          "Series_Complete_|",
-                          "Booster_Doses_|",
-                          #"Second_Booster_|",
-                          "Bivalent_Booster_)",
-                       ".*(5Plus|12Plus|18Plus|65Plus|Pct)")))
-## c19vacsMA_sel <- c19vacsMA_sel %>%
-##   mutate("Yr-Wk" = paste0("`", substr(year(Date), 3, 4), "-", MMWR_week))
+  select(!matches("State|FIPS|Second|Equity|_SVI|Completeness|Census|5to17|50Plus|Administered_Dose1_Recip$|Administered_Dose1_Pop_Pct$|Series_Complete_Yes$|Series_Complete_Pop_Pct$|Booster_Doses$|Booster_Doses_Vax_Pct$"))  
 
-# Renaming SVI vals and col names
-c19vacsMA_sel$SVI_CTGY[c19vacsMA_sel$SVI_CTGY == "A"] <- "0.00-0.25"
-c19vacsMA_sel$SVI_CTGY[c19vacsMA_sel$SVI_CTGY == "B"] <- "0.25-0.50"
-c19vacsMA_sel$SVI_CTGY[c19vacsMA_sel$SVI_CTGY == "C"] <- "0.50-0.75"
-c19vacsMA_sel$SVI_CTGY[c19vacsMA_sel$SVI_CTGY == "D"] <- "0.75-1.00"
-c19vacsMA_sel <- rename(c19vacsMA_sel, 
-       "Week"   = "MMWR_week", 
-       "County" = "Recip_County", 
-       "Metro"  = "Metro_status", 
-       "SVI"    = "SVI_CTGY")
+# Rename cols to more consistent scheme ( e.g. [Dose]_[Age]_[Cnt/Pct] )
+col_renames <- read_csv("data/renames.csv")
+names(c19vacsMA_sel) <- 
+  col_renames$New_Name[match(names(c19vacsMA_sel), col_renames$Original_Name)]
+
+# More transparent/less redundant value names
+c19vacsMA_sel$SVI[c19vacsMA_sel$SVI == "A"] <- "0.00-0.25"
+c19vacsMA_sel$SVI[c19vacsMA_sel$SVI == "B"] <- "0.25-0.50"
+c19vacsMA_sel$SVI[c19vacsMA_sel$SVI == "C"] <- "0.50-0.75"
+c19vacsMA_sel$SVI[c19vacsMA_sel$SVI == "D"] <- "0.75-1.00"
 c19vacsMA_sel$County <- str_replace(c19vacsMA_sel$County, " County", "")
 
 c19vacsMA_sel
@@ -92,46 +90,24 @@ c19vacsMA_sel
 
 # Pivoting (longer) to consolidate various dosages and age groups to 2 cols
 c19vacsMA_piv <- c19vacsMA_sel %>% 
-  pivot_longer(cols = Administered_Dose1_Pop_Pct:Bivalent_Booster_65Plus, 
-                 names_pattern = paste0(
-                   ".*(Dose1|Series|Booster_Doses|Bivalent)",
-                   ".*((?<!6)5Plus|12Plus|18Plus|65Plus)$"), # (?<!) look-behind
-                 names_to = c("Dose", "Age"), # 1st term matches 1st regex group
-                 values_to = "Count") #%>% 
-  # pivot_longer(cols = matches("(_Pct)$"), names_pattern = paste0)
-
-# Renaming vals of new Dose and Age cols
-c19vacsMA_piv$Dose[c19vacsMA_piv$Dose == "Dose1"]         <- "First"
-c19vacsMA_piv$Dose[c19vacsMA_piv$Dose == "Series"]        <- "Second"
-c19vacsMA_piv$Dose[c19vacsMA_piv$Dose == "Booster_Doses"] <- "Booster"
-c19vacsMA_piv$Age <- str_replace(c19vacsMA_piv$Age, "Plus", "+")
-
-# Pivoting (wider) to extract the total pop for each age (to then calc percents)
-# (consider also coalesce + replace for selectively pivoting wider...)
-# c19vacsMA_piv <- c19vacsMA_piv %>% 
-#   mutate(Pop = case_when(Age == "5+"  ~ Census2019_5PlusPop,
-#                          Age == "12+" ~ Census2019_12PlusPop,
-#                          Age == "18+" ~ Census2019_18PlusPop,
-#                          Age == "65+" ~ Census2019_65PlusPop)) %>% 
-#   select(-starts_with("Census"))
+  pivot_longer(cols = matches("Cnt$|Pct$"), 
+               # names_pattern = paste0(
+               #   ".*(First|Second|Booster|Bivalent)",
+               #   ".*((?<!6)5+|12+|18+|65+)$"), # (?<!) look-behind
+               # Using pattern: 1st term of names_to matches 1st regex group...
+               names_sep = '_',   # Instead use sep, relying on simplified names
+               names_to = c("Dose", "Age", "Type"),
+               values_to = "Amount") %>%
+    # Easier/cleaner to first pivot long, then wide, rather than a single pivot
+    pivot_wider(names_from = "Type", values_from = "Amount")
 
 c19vacsMA_piv
 
-#TODO: Why exactly no overall data for bivalent? Assumed to be 5yo+?
-#TODO: Why exactly is there so little data on Second_Booster?
 ```
 
 
 ### R: Analyzing...
 ```{r analyzing}
-c19vacsMA_per <- c19vacsMA_piv %>% 
-  # mutate(Percentage = ifelse((Count/Pop) <= 0.95, (Count/Pop), 0.95))
-  mutate(Percentage = Count/Pop)
-  c19vacsMA_per$Percentage[c19vacsMA_per$Percentage > 0.95] <- 0.95
-# NOTE: The CDC caps the percentage estimates at 95% (otherwise, some values are over 100%), so I am doing the same here.
-  
-c19vacsMA_per %>% 
-  filter(Dose == "First", County == "Suffolk", Age == "65+", format(Date, "%Y") == "2021")
 
 
 ```
@@ -140,27 +116,26 @@ c19vacsMA_per %>%
 ### R: Plotting...
 ```{r plotting}
 plot_spacing <- theme(plot.margin = unit(c(1, 1, 1, 1), "cm"), 
-                      plot.title = element_text(hjust = 0.5, vjust = 5), 
+                      plot.title = element_text(hjust = 0.4, vjust = 5), 
                       legend.title.align = 0.5, 
                       axis.title.x = element_text(vjust = -5), 
                       axis.title.y = element_text(vjust = 5))
 
-c19vacsMA_per %>%
-  filter(Dose == "First", County == "Suffolk", Age == "65+", format(Date, "%Y") == "2021") %>% 
+# Plot 1
+c19vacsMA_piv %>%
+  filter(Dose == "First", 
+         County == "Suffolk",
+         format(Date, "%Y") == "2021") %>%
   
-  ggplot(aes(Week, Percentage, color = Age)) +
+  ggplot(aes(Week, Pct, color = Age)) +
   geom_point(alpha = 0.5) +
-  labs(title = 
-         expression("Percentage of age groups with" ~bolditalic("at least")* 
-                    " one vaccine dose (by county)"),
+  labs(title = expression("Percentage of age groups with" ~bolditalic
+                          ("at least")* " one vaccine dose (Suffolk County)"),
        x = "MMWR Week", y = "Pop/Age Group Percentage", color = "Age Group") +
-  # scale_color_discrete(breaks = c('65+', '18+', '12+', '5+')) +
   scale_color_manual(breaks = c('65+', '18+',    '12+',   '5+'), 
                      values = c("red", "orange", "green", "blue")) +
   plot_spacing
 
-# TODO: Change to percentages and then change labels
-# TODO: Filters working properly?
 ```
 
 
