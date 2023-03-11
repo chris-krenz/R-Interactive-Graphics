@@ -1,10 +1,22 @@
 ---
-title: "Interactive Graphic Example - Covid-19 Vaccinations in Massachusetts"
+title: "Interactive Graphic Example:<br> Covid-19 Vaccinations in Suffolk County, MA"
 author: "Chris Krenz"
-date: "2023-03-08"
+date: "2023-03-10"
 output: html_document
 ---
 
+### Dataset: COVID-19 Vaccinations in the Suffolk County, Massachusetts, United States
+ - Source: United States Centers for Disease Control and Prevention
+ - URL: 
+https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh
+ - Downloaded: 3/8/2023
+ - See the data dictionary in doc/DataDictionary_v36_12082022.xlsx for additional information.
+  - https://github.com/chris-krenz/R-Interactive-Graphics/tree/main/doc
+
+
+### R: Setup...
+<details>
+  <summary>Expand to see R code chunks...</summary>
 ```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
@@ -15,44 +27,12 @@ library(crosstalk)
 # library(lubridate) # Can use to more easily extract year from a date
 
 ```
-
-
-# Introduction
-### Background
-
-### Purpose
-
-### Dataset: COVID-19 Vaccinations in the Massachusetts
- - Source: United States Centers for Disease Control and Prevention
- - URL: 
-https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh
- - Downloaded: 3/8/2023
- 
-### Methods
- - Dependent Vars:
-   - Vaccination counts overall and for each age group:
-     - 5+
-     - 12+
-     - 18+
-     - 65+
-   - Note: Only age groups with available data for all doses are included.
-   - Note: 5+ counts are used for total counts.
- - Independent Vars:
-   - Date (Range: 12/13/2020 - 2/15/2023)
-   - MMWR Week (Morbidity and Mortality Weekly Report) (52-53 per year)
-   - County (includes all 14 MA counties and 'Unknown County')
-     - Note: Counties are also identified by the FIPS code (Federal Information Processing Standard).
-   - Metro Status (Metro or Non-Metro)
-   - SVI_CTGY: CDC Social Vulnerability Index (SVI) Rank
-     - A: 0–0.25 SVI rank
-     - B: 0.2501–0.50 SVI rank
-     - C: 0.5001–0.75 SVI rank
-     - D: 0.7501–1.0 SVI rank
-
-See the data dictionary in doc/DataDictionary_v36_12082022.xlsx for additional information.
+</details>
 
 
 ### R: Importing...
+<details>
+  <summary>Expand to see R code chunks...</summary>
 ```{r importing}
 c19vacsMA_raw <- read_csv("data/COVID-19_Vaccinations_MA_County.csv",
                     skip = 1,   # source URL
@@ -64,9 +44,12 @@ problems(c19vacsMA_raw) # No problems (3/8/2023)
 c19vacsMA_raw
 
 ```
+</details>
 
 
 ### R: Tidying...
+<details>
+  <summary>Expand to see R code chunks...</summary>
 ```{r tidying}
 # Remove CDC analyses and other fields due to insufficient or inconsistent data
 # (e.g. no pop level data for bivalent, missing age groups for 2nd booster, etc)
@@ -104,44 +87,43 @@ c19vacsMA_piv <- c19vacsMA_sel %>%
 c19vacsMA_piv
 
 ```
-
-
-### R: Analyzing...
-```{r analyzing}
-
-
-```
+</details> 
 
 
 ### R: Plotting...
+<details>
+  <summary>Expand to see R code chunks...</summary>
 ```{r plotting}
-plot_spacing <- theme(plot.margin = unit(c(1, 1, 1, 1), "cm"), 
-                      plot.title = element_text(hjust = 0.4, vjust = 5), 
+plot_spacing <- theme(plot.margin = unit(c(2, 1, 1, 1), "cm"), 
+                      plot.title = element_text(hjust = 0.5, vjust = 10), 
                       legend.title.align = 0.5, 
                       axis.title.x = element_text(vjust = -5), 
                       axis.title.y = element_text(vjust = 5))
 
 # Plot 1
-test <- c19vacsMA_piv %>%
+fig <- c19vacsMA_piv %>%
   filter(Dose == "First", 
-         County == "Suffolk",
-         format(Date, "%Y") == "2021") %>%
+         County == "Suffolk") %>% 
+         # format(Date, "%Y") == "2021") %>%
   group_by(Week) %>% 
   
-  ggplot(aes(Week, Pct, color = Age)) +
+  ggplot(aes(Date, Pct, color = Age)) +
   geom_point(alpha = 0.5) +
-  labs(title = "Percentage of age groups with at least one vaccine dose (Suffolk County)",
+  labs(title = "Percentage of age groups with at least 
+one vaccine dose (Suffolk County, MA)
+(hover over points for details, drag to zoom)",
          # ggplotly cannot accept Expressions in plot titles...
          # expression("Percentage of age groups with" ~bolditalic
          #                  ("at least")* " one vaccine dose (Suffolk County)"),
-       x = "MMWR Week", y = "Pop/Age Group Percentage", color = "Age Group") +
+       x = "Date", y = "Age Group Percentage", color = "Age Group
+(click to toggle)") +
   scale_color_manual(breaks = c('65+', '18+',    '12+',   '5+'), 
                      values = c("red", "orange", "green", "blue")) +
   plot_spacing
-test
 
-ggplotly(p = test)
+# ggplotly(fig)
 
+# Sample plotly htmlwidget
 # fig <- plot_ly() %>% 
 #   add_lines(x = c("a", "b", "c"), y = c(1, 3, 2)) %>% 
 #   layout(title = "sample figure", xaxis = list(title = 'x'), yaxis = list(title = 'y'), plot_bgcolor = "#c7daec")
@@ -149,14 +131,9 @@ ggplotly(p = test)
 # fig
 
 ```
+</details>
 
 
-# Conclusion
-### Discussion
-
-### References
-
-### Notes
-
-### Credits
-
+```{r figures, echo = FALSE}
+ggplotly(fig)
+```
