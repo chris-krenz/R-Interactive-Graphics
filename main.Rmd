@@ -121,19 +121,23 @@ one vaccine dose (Suffolk County, MA)
                      values = c("red", "orange", "green", "blue")) +
   plot_spacing
 
-# ggplotly(fig)
+plotlyfig <- ggplotly(fig)
 
-# Sample plotly htmlwidget
-# fig <- plot_ly() %>% 
-#   add_lines(x = c("a", "b", "c"), y = c(1, 3, 2)) %>% 
-#   layout(title = "sample figure", xaxis = list(title = 'x'), yaxis = list(title = 'y'), plot_bgcolor = "#c7daec")
-# str(fig$x)
-# fig
+# Fix legend order from transfer to plotly
+twelve    <- plotlyfig[["x"]][["data"]][[1]]
+eighteen  <- plotlyfig[["x"]][["data"]][[2]]
+five      <- plotlyfig[["x"]][["data"]][[3]]
+sixtyfive <- plotlyfig[["x"]][["data"]][[4]]
+plotlyfig[["x"]][["data"]][[1]] <- sixtyfive
+plotlyfig[["x"]][["data"]][[2]] <- eighteen
+plotlyfig[["x"]][["data"]][[3]] <- twelve
+plotlyfig[["x"]][["data"]][[4]] <- five
 
 ```
 </details>
 
 
 ```{r figures, echo = FALSE}
-ggplotly(fig)
+plotlyfig
+
 ```
